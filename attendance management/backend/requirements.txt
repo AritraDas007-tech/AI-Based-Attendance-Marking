@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlalchemy
+pydantic
+python-multipart
+python-jose[cryptography]
+passlib[bcrypt]
+opencv-python
+face_recognition
+pandas
+numpy
+openpyxl
+jinja2
+python-multipart
+aiofiles
+sqlite3
