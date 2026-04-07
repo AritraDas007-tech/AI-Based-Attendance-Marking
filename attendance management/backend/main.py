@@ -7,8 +7,31 @@ import pandas as pd
 import io
 from typing import List, Optional
 
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 import models, schemas, database, auth_utils, face_service
 from database import engine, get_db
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+def get_current_user_info(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        print(f"Decoding token: {token[:20]}...")
+        payload = jwt.decode(token, auth_utils.SECRET_KEY, algorithms=[auth_utils.ALGORITHM])
+        print(f"Payload: {payload}")
+        email: str = payload.get("sub")
+        role: str = payload.get("role")
+        if email is None:
+            raise credentials_exception
+        return {"email": email, "role": role}
+    except JWTError as e:
+        print(f"JWT Error: {e}")
+        raise credentials_exception
 
 # Create tables
 models.Base.metadata.create_all(bind=engine)
@@ -66,7 +89,7 @@ def register_student(student: schemas.StudentCreate, db: Session = Depends(get_d
             full_name=student.full_name,
             roll_number=student.roll_number,
             department=student.department,
-            class_name=student.class_name,
+            class_year=student.class_year,
             mobile_number=student.mobile_number,
             email=student.email,
             hashed_password=hashed_password
@@ -159,7 +182,9 @@ async def mark_attendance(image_data: dict, db: Session = Depends(get_db)):
                 student_id=student.id,
                 date=today,
                 time=now.strftime("%H:%M:%S"),
-                status="Present"
+                status="Present",
+                department=student.department,
+                class_year=student.class_year
             )
             db.add(new_attendance)
             db.commit()
@@ -208,7 +233,7 @@ def export_attendance(db: Session = Depends(get_db)):
             "Student Name": stu.full_name,
             "Roll Number": stu.roll_number,
             "Department": stu.department,
-            "Class": stu.class_name,
+            "Class": stu.class_year,
             "Date": att.date,
             "Time": att.time,
             "Status": att.status
@@ -240,3 +265,164 @@ async def get_face_encoding(image_data: dict):
     except Exception as e:
         log_debug(f"ERR: /face/encoding failed: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- DEPARTMENT ENDPOINTS ---
+@app.get("/departments", response_model=List[schemas.Department])
+def get_departments(db: Session = Depends(get_db)):
+    return db.query(models.Department).all()
+
+@app.post("/departments", response_model=schemas.Department)
+def create_department(dept: schemas.DepartmentCreate, db: Session = Depends(get_db)):
+    db_dept = models.Department(name=dept.name, years=dept.years)
+    db.add(db_dept)
+    db.commit()
+    db.refresh(db_dept)
+    return db_dept
+
+@app.put("/departments/{id}", response_model=schemas.Department)
+def update_department(id: int, dept: schemas.DepartmentCreate, db: Session = Depends(get_db)):
+    db_dept = db.query(models.Department).filter(models.Department.id == id).first()
+    if not db_dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    db_dept.name = dept.name
+    db_dept.years = dept.years
+    db.commit()
+    db.refresh(db_dept)
+    return db_dept
+
+@app.delete("/departments/{id}")
+def delete_department(id: int, db: Session = Depends(get_db)):
+    db_dept = db.query(models.Department).filter(models.Department.id == id).first()
+    if not db_dept:
+        raise HTTPException(status_code=404, detail="Department not found")
+    db.delete(db_dept)
+    db.commit()
+    return {"message": "Department deleted"}
+
+# --- SCHEDULE ENDPOINTS ---
+@app.get("/schedules", response_model=List[schemas.Schedule])
+def get_schedules(db: Session = Depends(get_db)):
+    schedules = db.query(models.Schedule).all()
+    # Manually add department_name for UI convenience
+    for s in schedules:
+        setattr(s, 'department_name', s.department.name)
+    return schedules
+
+@app.post("/schedules", response_model=schemas.Schedule)
+def create_schedule(sched: schemas.ScheduleCreate, db: Session = Depends(get_db)):
+    db_sched = models.Schedule(**sched.dict())
+    db.add(db_sched)
+    db.commit()
+    db.refresh(db_sched)
+    setattr(db_sched, 'department_name', db_sched.department.name)
+    return db_sched
+
+@app.delete("/schedules/{id}")
+def delete_schedule(id: int, db: Session = Depends(get_db)):
+    db_sched = db.query(models.Schedule).filter(models.Schedule.id == id).first()
+    if not db_sched:
+        raise HTTPException(status_code=404, detail="Schedule not found")
+    db.delete(db_sched)
+    db.commit()
+    return {"message": "Schedule deleted"}
+
+# --- DRILL-DOWN ENDPOINTS ---
+@app.get("/departments-list")
+def get_departments_static():
+    return [
+        {"id": 1, "name": "Computer Science and Engineering (CSE)"},
+        {"id": 2, "name": "Data Science (DS)"},
+        {"id": 3, "name": "Civil Engineering"},
+        {"id": 4, "name": "Electrical Engineering"}
+    ]
+
+@app.get("/students-list")
+def get_students_filtered(department: str, year: str, db: Session = Depends(get_db)):
+    # Map friendly names if needed or use exact match
+    # Expecting department as name from above and year as "1st Year", etc.
+    students = db.query(models.Student).filter(
+        models.Student.department == department,
+        models.Student.class_year == year
+    ).all()
+    return students
+
+@app.get("/students/{id}/stats")
+def get_student_stats(id: int, db: Session = Depends(get_db)):
+    student = db.query(models.Student).filter(models.Student.id == id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    
+    # Calculate attendance
+    attendance_records = db.query(models.Attendance).filter(models.Attendance.student_id == id).all()
+    present_days = len([a for a in attendance_records if a.status == "Present"])
+    
+    # Total sessions (Assume one per day since start of system or just total records)
+    # For now, let's assume total records = total sessions offered to this student
+    # Or calculate unique days in attendance table
+    total_sessions = len(attendance_records) 
+    
+    # If 0 records, assume 0%
+    percentage = (present_days / total_sessions * 100) if total_sessions > 0 else 100.0
+    
+    return {
+        "full_name": student.full_name,
+        "roll_number": student.roll_number,
+        "department": student.department,
+        "year": student.class_year,
+        "attendance_percentage": round(percentage, 2),
+        "total_present": present_days,
+        "total_absent": total_sessions - present_days,
+        "status": "Defaulter" if percentage < 75 else "Regular"
+    }
+
+@app.delete("/students/{id}")
+def delete_student(id: int, db: Session = Depends(get_db), current_user: dict = Depends(get_current_user_info)):
+    # Check authorization
+    # If student, can only delete self. Need to find student by email to get their ID.
+    target_student = db.query(models.Student).filter(models.Student.id == id).first()
+    if not target_student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    if current_user["role"] == "student":
+        # Check if the student's email matches the target student's email
+        if current_user["email"] != target_student.email:
+            raise HTTPException(status_code=403, detail="Not authorized to delete this student record")
+    elif current_user["role"] != "teacher":
+        raise HTTPException(status_code=403, detail="Only teachers or the student themselves can delete this record")
+
+    try:
+        # Cascading delete: Attendance
+        db.query(models.Attendance).filter(models.Attendance.student_id == id).delete()
+        # Cascading delete: FaceEncodings
+        db.query(models.FaceEncoding).filter(models.FaceEncoding.student_id == id).delete()
+        # Delete the student
+        db.delete(target_student)
+        db.commit()
+        return {"message": "Student and all associated records deleted successfully"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Deletion failed: {str(e)}")
+
+@app.get("/attendance/report")
+def get_attendance_report(department: Optional[str] = None, year: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(models.Attendance, models.Student).join(models.Student)
+    if department:
+        query = query.filter(models.Student.department == department)
+    if year:
+        query = query.filter(models.Student.class_year == year)
+    
+    results = query.all()
+    report = []
+    for att, stu in results:
+        report.append({
+            "id": att.id,
+            "student_id": stu.id,
+            "name": stu.full_name,
+            "roll_no": stu.roll_number,
+            "department": stu.department,
+            "class_year": stu.class_year,
+            "date": att.date,
+            "time": att.time,
+            "status": att.status
+        })
+    return report

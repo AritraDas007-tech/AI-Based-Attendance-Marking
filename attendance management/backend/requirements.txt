@@ -13,4 +13,3 @@ openpyxl
 jinja2
 python-multipart
 aiofiles
-sqlite3
