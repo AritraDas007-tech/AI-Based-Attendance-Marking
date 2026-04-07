@@ -9,7 +9,7 @@ const RegisterStudent = () => {
     full_name: '',
     roll_number: '',
     department: '',
-    class_name: '',
+    class_year: '',
     mobile_number: '',
     email: '',
     password: ''
@@ -34,6 +34,13 @@ const RegisterStudent = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Basic validation for dropdowns
+    if (!formData.department || !formData.class_year) {
+      setError('Please select both Department and Class/Year.');
+      return;
+    }
+
     if (faceImages.length < 3) {
       setError('Please capture at least 3 face images for better accuracy.');
       return;
@@ -100,13 +107,13 @@ const RegisterStudent = () => {
                 <label className="text-xs text-dark-muted flex items-center space-x-1">
                   <User size={12} /> <span>Full Name</span>
                 </label>
-                <input name="full_name" onChange={handleInputChange} className="input-field py-1" required />
+                <input name="full_name" onChange={handleInputChange} className="input-field py-1" required placeholder="Enter full name" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-dark-muted flex items-center space-x-1">
                   <Hash size={12} /> <span>Roll Number</span>
                 </label>
-                <input name="roll_number" onChange={handleInputChange} className="input-field py-1" required />
+                <input name="roll_number" onChange={handleInputChange} className="input-field py-1" required placeholder="e.g. CSE001" />
               </div>
             </div>
             
@@ -115,13 +122,37 @@ const RegisterStudent = () => {
                 <label className="text-xs text-dark-muted flex items-center space-x-1">
                   <BookOpen size={12} /> <span>Department</span>
                 </label>
-                <input name="department" onChange={handleInputChange} className="input-field py-1" required />
+                <select 
+                  name="department" 
+                  onChange={handleInputChange} 
+                  className="input-field py-1 h-[34px] bg-[#0f172a]" 
+                  required
+                  value={formData.department}
+                >
+                  <option value="">Select Department</option>
+                  <option value="CSE">CSE</option>
+                  <option value="Data Science">Data Science</option>
+                  <option value="Civil">Civil</option>
+                  <option value="Electrical">Electrical</option>
+                </select>
               </div>
               <div className="space-y-1">
                 <label className="text-xs text-dark-muted flex items-center space-x-1">
                   <BookOpen size={12} /> <span>Class/Year</span>
                 </label>
-                <input name="class_name" onChange={handleInputChange} className="input-field py-1" required />
+                <select 
+                  name="class_year" 
+                  onChange={handleInputChange} 
+                  className="input-field py-1 h-[34px] bg-[#0f172a]" 
+                  required
+                  value={formData.class_year}
+                >
+                  <option value="">Select Class/Year</option>
+                  <option value="1st Year">1st Year</option>
+                  <option value="2nd Year">2nd Year</option>
+                  <option value="3rd Year">3rd Year</option>
+                  <option value="4th Year">4th Year</option>
+                </select>
               </div>
             </div>
 
@@ -129,24 +160,24 @@ const RegisterStudent = () => {
               <label className="text-xs text-dark-muted flex items-center space-x-1">
                 <Phone size={12} /> <span>Mobile Number</span>
               </label>
-              <input name="mobile_number" onChange={handleInputChange} className="input-field py-1" required />
+              <input name="mobile_number" onChange={handleInputChange} className="input-field py-1" required placeholder="Enter mobile number" />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs text-dark-muted flex items-center space-x-1">
                 <Mail size={12} /> <span>Email</span>
               </label>
-              <input name="email" type="email" onChange={handleInputChange} className="input-field py-1" required />
+              <input name="email" type="email" onChange={handleInputChange} className="input-field py-1" required placeholder="Enter email address" />
             </div>
 
             <div className="space-y-1">
               <label className="text-xs text-dark-muted flex items-center space-x-1">
                 <Lock size={12} /> <span>Password</span>
               </label>
-              <input name="password" type="password" onChange={handleInputChange} className="input-field py-1" required />
+              <input name="password" type="password" onChange={handleInputChange} className="input-field py-1" required placeholder="Create password" />
             </div>
 
-            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-4">
+            <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-4 active:scale-95 transition-transform">
               {loading ? 'Registering...' : 'Complete Registration'}
             </button>
           </form>

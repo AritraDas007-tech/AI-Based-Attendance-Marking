@@ -4,7 +4,9 @@ import {
   CheckCircle, 
   Clock, 
   Trophy,
-  PieChart as PieIcon
+  PieChart as PieIcon,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import api from '../api/api';
@@ -28,6 +30,21 @@ const StudentDashboard = () => {
     };
     fetchHistory();
   }, [studentId]);
+
+  const handleDeleteAccount = async () => {
+    if (window.confirm("Are you sure you want to delete your account? This action is permanent and will remove all your attendance data.")) {
+      try {
+        await api.delete(`/students/${studentId}`);
+        alert("Your account has been deleted successfully.");
+        // Cleanup local storage and redirect
+        localStorage.clear();
+        window.location.href = '/login';
+      } catch (err) {
+        console.error('Account deletion failed:', err);
+        alert(err.response?.data?.detail || 'Failed to delete account');
+      }
+    }
+  };
 
   const presentCount = history.length;
   const totalDays = 30; // Mock total days
@@ -138,6 +155,25 @@ const StudentDashboard = () => {
                   <p>No attendance records found yet.</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          <div className="card border-red-500/20 bg-red-500/5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-red-500 flex items-center space-x-2">
+                  <AlertTriangle size={20} />
+                  <span>Danger Zone</span>
+                </h3>
+                <p className="text-sm text-dark-muted">Permanently delete your account and all records.</p>
+              </div>
+              <button 
+                onClick={handleDeleteAccount}
+                className="px-6 py-3 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-bold flex items-center justify-center space-x-2 shadow-lg shadow-red-600/20 outline-none"
+              >
+                <Trash2 size={18} />
+                <span>Delete My Account</span>
+              </button>
             </div>
           </div>
         </div>
